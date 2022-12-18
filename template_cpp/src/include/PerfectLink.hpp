@@ -35,12 +35,15 @@ public:
         this->st_link.send(pl_m, dest_addr);
     }
 
-    Message deliver()
+    Message deliver(long unsigned current_iter)
     {
         pair<set<Message>::iterator, bool> ret;
         Message pl_m = this->st_link.deliver();
 
         ret = delivered[pl_m.original_id-1].insert(pl_m);
+        if(pl_m.iter>current_iter){
+            return Message(); 
+        }
 
         if (ret.second == true)
         {

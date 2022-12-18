@@ -11,7 +11,6 @@
 
 class LatteAggrement{
 public:
-    bool active;
     long unsigned current_iter;
     long unsigned ack_count;
     long unsigned nack_count;
@@ -52,11 +51,8 @@ public:
         }
 
         // Trigger the beb of the first proposed_value;
-        
         Tosend=vector<vector<Message>>(128);
-        accepted_value_vec.push_back(set<long unsigned>());
-        
-
+        this->accepted_value_vec.push_back(set<long unsigned>());
         // Add the forst Proposal
         Tobroadcast.push_back(Message(0,\
         current_iter,myid,active_proposal_num,proposed_value));
@@ -70,9 +66,11 @@ public:
         while(1){
             // BroadCast
             // cout<<"Broadcast"<<endl;
+            unsigned int k=0;
             mut_broadcast.lock();
             for(long unsigned i=0;i<Tobroadcast.size();i++){ 
                     sendrange(Tobroadcast[i]);
+
             }
             mut_broadcast.unlock();
             // Send
@@ -94,13 +92,16 @@ public:
         //cout<<m.m_type<< " "<<m.value_set[0]<<endl;
         for(long unsigned i=0;i<this->host_num;i++){
             this->pl_link.send(m,host_dicts[i]);
+            if(m.proposal_num==1&&i==2){
+                // cout<<"To 3"<<endl;
+            }
         }
 
     }
 
     void upon_change_ack_nack(Message & m){
         if(nack_count>0 && (ack_count+nack_count>=host_num/2+host_num%2) &&
-         m.iter==current_iter){ // Modify the active bool
+         this->current_iter==m.iter){
             active_proposal_num++;
             ack_count=0;
             nack_count=0;
@@ -111,12 +112,15 @@ public:
             current_iter,myid,active_proposal_num,proposed_value));// WARN: Modify Here
             mut_broadcast.unlock();
         }
-        else if(ack_count>=(host_num/2+host_num%2) && m.iter==current_iter) {
+        else if(ack_count>=(host_num/2+host_num%2) && this->current_iter==m.iter) {
             //decide
             Todecide.push_back(proposed_value);
             cout<<"Decide"<<endl;
-            // Clean the previous things;
-             // Enter the next proposal stage(iter);
+            // this->current_iter++; // Enter the next proposal stage(iter);
+            /****************************************
+             * From last version code
+             * 
+            */
             this->ack_count=0;
             this->nack_count=0;
             this->active_proposal_num=0;
@@ -172,11 +176,10 @@ public:
     void deliver(){
         Message m;
         while(1){
-            
             // Pay Attention: I would force perfect link only
             // deliver message belonging to the same 'iter' 
             // and same 'propose_num'
-            m=this->pl_link.deliver();
+            m=this->pl_link.deliver(current_iter);
 
             if(m.original_id!=0){
                 // ACK
@@ -190,6 +193,7 @@ public:
                 }
                 // NACK
                 if(m.m_type==2&&m.proposal_num==active_proposal_num&&m.iter==current_iter){
+                    // Add the modification above m.iter==current_iter
                     nack_count++;
                     for(long unsigned k=0;k<m.value_set_num;k++){
                         proposed_value.insert(m.value_set[k]);
@@ -198,41 +202,41 @@ public:
                     for(long unsigned i=0;i<m.value_set_num;i++){
                         cout<<m.value_set[i]<<" ";
                     }
-                    cout<<" activeround:"<<m.proposal_num<<" myround:"<<active_proposal_num <<endl;
+                    cout<<" activeround:"<<m.proposal_num<<"myround:"<<active_proposal_num <<endl;
                     upon_change_ack_nack(m);
                     
                 }
                 // PROPOSAL
+                // if(m.iter>=accepted_value_vec.size()){
+                //     accepted_value_vec.push
+                // }
+                bool tag=mergeset(accepted_value_vec[m.iter-1],m);
+                if(m.m_type==0 && tag){
+                    // ACK
+                    mut_send.lock();
+                    Tosend[m.original_id-1].push_back(Message(1,
+                    m.iter,myid,m.proposal_num));
+                    mut_send.unlock();
 
-                // Modify
-                if(m.m_type==0 && m.iter<=current_iter){
-                    bool tag=mergeset(accepted_value_vec[m.iter-1],m);
-                    if(m.m_type==0 && tag){
-                        // ACK
-                        mut_send.lock();
-                        Tosend[m.original_id-1].push_back(Message(1,
-                        m.iter,myid,m.proposal_num)); // Modify the current_iter to m.tier
-                        mut_send.unlock();
+                    cout<<"Send Ack Oid:"<<myid<<"To "<<m.original_id<<" Iter:"<<m.iter<<" Type:"<<m.m_type;
+                    cout<<" activeround:"<<m.proposal_num<<"myround:"<<active_proposal_num <<endl;
 
-                        cout<<"Send Ack Oid:"<<myid<<" Iter " <<m.iter<<"To "<<m.original_id<<" Type:"<<m.m_type;
-                        cout<<" activeround:"<<m.proposal_num<<"myround:"<<active_proposal_num <<endl;
-
-                    }
-                    else if(m.m_type==0 && !tag){
-                        // NACK
-                        mut_send.lock();
-                        Tosend[m.original_id-1].push_back(Message(2,
-                        m.iter,myid,m.proposal_num,accepted_value_vec[m.iter-1]));
-                        mut_send.unlock();
-
-                        cout<<"Send NACK Oid:"<<myid<<"To "<<m.original_id <<" Type:"<<m.m_type<<" Value:";
-                            for(auto it= accepted_value_vec[m.iter-1].begin();
-                            it!=accepted_value_vec[m.iter-1].end();it++){
-                                cout<<*it<<" ";
-                            }
-                            cout<<" activeround:"<<m.proposal_num<<" myround:"<<active_proposal_num <<endl;
-                    }
                 }
+                else if(m.m_type==0 && !tag){
+                    // NACK
+                    mut_send.lock();
+                    //m.iter not current iter
+                    Tosend[m.original_id-1].push_back(Message(2,
+                    m.iter,myid,m.proposal_num,accepted_value_vec[m.iter-1]));
+                    mut_send.unlock();
+
+                    cout<<"Send NACK Oid:"<<myid<<"To "<<m.original_id <<" Type:"<<m.m_type<<" Value:";
+                        for(auto it= accepted_value_vec[m.iter-1].begin();it!=accepted_value_vec[m.iter-1].end();it++){
+                            cout<<*it<<" ";
+                        }
+                        cout<<" activeround:"<<m.proposal_num<<"myround:"<<active_proposal_num <<endl;
+                }
+
                 
             }
 
