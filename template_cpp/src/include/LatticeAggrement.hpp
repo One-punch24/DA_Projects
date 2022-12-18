@@ -17,6 +17,7 @@ public:
     long unsigned active_proposal_num;
 
     long unsigned myid;
+    long unsigned max_iters;
     long unsigned host_num;
     vector<struct sockaddr_in> host_dicts;
     int socket_fd;
@@ -29,7 +30,7 @@ public:
 
 
     LatteAggrement(vector<struct sockaddr_in> & host_dicts,
-    long unsigned  myid,int socket_fd){
+    long unsigned  myid,int socket_fd,long unsigned max_its){
         cout<<"LA Init Start"<<endl;
         this->current_iter=1;
         this->ack_count=0;
@@ -37,6 +38,7 @@ public:
         this->active_proposal_num=0;
         this->myid=myid;
         this->socket_fd=socket_fd;
+        this->max_iters=max_its;
         this->host_dicts=host_dicts;
         struct sockaddr_in myaddr=host_dicts[(myid-1)];
         
@@ -92,9 +94,7 @@ public:
         //cout<<m.m_type<< " "<<m.value_set[0]<<endl;
         for(long unsigned i=0;i<this->host_num;i++){
             this->pl_link.send(m,host_dicts[i]);
-            if(m.proposal_num==1&&i==2){
-                // cout<<"To 3"<<endl;
-            }
+
         }
 
     }
@@ -126,17 +126,20 @@ public:
             this->active_proposal_num=0;
             this->accepted_value_vec.push_back(set<long unsigned>());
             this->proposed_value.clear();
+            this->current_iter++;
 
             // Start next round
-            mut_broadcast.lock();
-            this->current_iter++;
-            for(auto it=vec_proposals[current_iter-1].begin();
-                it!=vec_proposals[current_iter-1].end();it++){
-                proposed_value.insert(*it);
+            if(current_iter<=max_iters){
+                mut_broadcast.lock();
+                
+                for(auto it=vec_proposals[current_iter-1].begin();
+                    it!=vec_proposals[current_iter-1].end();it++){
+                    proposed_value.insert(*it);
+                }
+                this->Tobroadcast.push_back(Message(0,
+                this->current_iter,myid,active_proposal_num,proposed_value));
+                mut_broadcast.unlock();
             }
-            this->Tobroadcast.push_back(Message(0,
-            this->current_iter,myid,active_proposal_num,proposed_value));
-            mut_broadcast.unlock();
         }
 
     }
@@ -191,6 +194,7 @@ public:
                     upon_change_ack_nack(m);
                     // cout<<"hello man"<<endl;
                 }
+
                 // NACK
                 if(m.m_type==2&&m.proposal_num==active_proposal_num&&m.iter==current_iter){
                     // Add the modification above m.iter==current_iter
@@ -218,7 +222,7 @@ public:
                     m.iter,myid,m.proposal_num));
                     mut_send.unlock();
 
-                    cout<<"Send Ack Oid:"<<myid<<"To "<<m.original_id<<" Iter:"<<m.iter<<" Type:"<<m.m_type;
+                    cout<<"Send Ack Oid:"<<myid<<" To "<<m.original_id<<" Iter:"<<m.iter<<" Type:"<<m.m_type;
                     cout<<" activeround:"<<m.proposal_num<<"myround:"<<active_proposal_num <<endl;
 
                 }
@@ -230,7 +234,7 @@ public:
                     m.iter,myid,m.proposal_num,accepted_value_vec[m.iter-1]));
                     mut_send.unlock();
 
-                    cout<<"Send NACK Oid:"<<myid<<"To "<<m.original_id <<" Type:"<<m.m_type<<" Value:";
+                    cout<<"Send NACK Oid:"<<myid<<" To "<<m.original_id <<" Iter:"<<m.iter<<" Type:"<<m.m_type<<" Value:";
                         for(auto it= accepted_value_vec[m.iter-1].begin();it!=accepted_value_vec[m.iter-1].end();it++){
                             cout<<*it<<" ";
                         }

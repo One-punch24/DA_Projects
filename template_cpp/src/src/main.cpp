@@ -157,7 +157,7 @@ int main(int argc, char **argv)
   
 
   // Lattice Aggrement Debug seperately for send and deliver;
-  LatteAggrement LatteA(host_dicts,myid,socket_fd);
+  LatteAggrement LatteA(host_dicts,myid,socket_fd,proposal_round);
   std::cout << "Broadcasting and delivering messages...\n\n";
   cout<<argc<<endl;
   if(argc<9){

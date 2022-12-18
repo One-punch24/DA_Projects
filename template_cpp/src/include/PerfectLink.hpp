@@ -39,12 +39,11 @@ public:
     {
         pair<set<Message>::iterator, bool> ret;
         Message pl_m = this->st_link.deliver();
-
-        ret = delivered[pl_m.original_id-1].insert(pl_m);
+        
         if(pl_m.iter>current_iter){
             return Message(); 
         }
-
+        ret = delivered[pl_m.original_id-1].insert(pl_m);
         if (ret.second == true)
         {
             return pl_m;
