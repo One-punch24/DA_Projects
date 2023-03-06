@@ -39,15 +39,13 @@ public:
                 //cout<<"Revice Some In"<<endl;
             Message messa;
             memcpy(&messa,messa_netstr,sizeof(messa_netstr));
-            //cout<<"d at receiver "<<messa.original_id<<" "<<messa.seq_n<<endl;
+            //cout<<"d at receiver"<<messa.original_id<<" "<<messa.seq_n<<endl;
             return messa;
         }
         else{
-            cout<<"Something wrong"<<endl;
             perror("Something wrong");
             struct sockaddr_in nmd;
-            // Modify here
-            return Message();
+            return Message(0,0,0,nmd);
         }
       
     }
@@ -76,7 +74,6 @@ public:
     void send(Message messa,struct sockaddr_in dest_addr ){
                 
         char messa_netstr[sizeof(messa)];
-        //cout<<messa.original_id<<" "<<messa.seq_n<<endl;
         messa.to_byte_for_socket(messa_netstr); 
         ssize_t ref=sendto(socket_fd,messa_netstr,sizeof(messa),0, \
         reinterpret_cast<const struct sockaddr *>(& dest_addr),sizeof(struct sockaddr));

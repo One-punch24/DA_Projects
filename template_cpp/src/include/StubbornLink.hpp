@@ -24,7 +24,9 @@ public:
         for(int i=0;i<max_send_times;i++){
             this->fl_link.send(sl_m,  dest_addr);
         }
-
+        // while(true){
+        //     this->fl_link.send(sl_m,  dest_addr);
+        // }
     }
 
     Message deliver(){

@@ -1,3 +1,0 @@
-/home/onepunchman/Desktop/Courses/DA/CS451_Proj2/build/CMakeFiles/rebuild_cache.dir
-/home/onepunchman/Desktop/Courses/DA/CS451_Proj2/build/CMakeFiles/edit_cache.dir
-/home/onepunchman/Desktop/Courses/DA/CS451_Proj2/build/CMakeFiles/da_proc.dir

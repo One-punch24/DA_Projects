@@ -5,25 +5,18 @@
 #include <sys/socket.h>
 #include <thread>
 #include <map>
-#include<string>
-#include<sstream>
-#include <mutex>
+
 #include "parse.hpp"
-#include "hello.h"
-#include "utils.h"
-
-using  namespace std;
-// #include <windows.h>
-
 #include "PerfectLink.hpp"
-#include "LatticeAggrement.hpp"
+#include "hello.h"
+#include "Pl_Listeners.h"
+#include "utils.h"
 const char *fn;
+vector<Message> messa_send;
+vector<Message> messa_todeliver;
 int socket_fd;
-unsigned long int window_send_main;
-vector<set<long unsigned>> Todecide;
-vector<vector<long unsigned>> vec_proposals;
-mutex mut_send;
-mutex mut_broadcast;
+
+
 
 static void stop(int)
 {
@@ -33,12 +26,11 @@ static void stop(int)
 
   // immediately stop network packet processing
   std::cout << "Immediately stopping network packet processing.\n";
-  // cout << messa_todeliver.size() << "nmd" << endl;
-  //
+  //cout << messa_todeliver.size() << "nmd" << endl;
+  OutputFile(fn, messa_send,messa_todeliver);
 
   // write/flush output file if necessary
   std::cout << "Writing output.\n";
-  OuttoFile(fn);
 
   // exit directly from signal handler
   exit(0);
@@ -48,8 +40,7 @@ int main(int argc, char **argv)
 {
   signal(SIGTERM, stop);
   signal(SIGINT, stop);
-  // MYDEBUG
-  //cout<<argv[9]<<endl;
+
   // `true` means that a config file is required.
   // Call with `false` if no config file is necessary.
   bool requireConfig = true;
@@ -57,8 +48,6 @@ int main(int argc, char **argv)
   Parser parser(argc, argv);
   parser.parse();
 
-  // Outputfile
-  fn = parser.outputPath();
   hello();
   std::cout << std::endl;
 
@@ -71,7 +60,7 @@ int main(int argc, char **argv)
   std::cout << "List of resolved hosts is:\n";
   std::cout << "==========================\n";
   auto hosts = parser.hosts();
-  vector<struct sockaddr_in> host_dicts;
+  map<long unsigned, struct sockaddr_in> host_dicts;
 
   // Others First
   for (auto &host : hosts)
@@ -85,12 +74,11 @@ int main(int argc, char **argv)
     std::cout << "Machine-readbale Port: " << host.port << "\n";
     std::cout << "\n";
     host_addr = ConstructNetAddr(host.ip, host.port);
-    host_dicts.push_back(host_addr);
+    host_dicts.insert({host.id, host_addr});
   }
 
   unsigned long int myid = parser.id();
-  cout<<myid<<endl;
-  struct sockaddr_in myaddr = host_dicts[static_cast<int>(myid-1)];
+  struct sockaddr_in myaddr = host_dicts[static_cast<int>(myid)];
 
   std::cout << "\n";
 
@@ -105,15 +93,21 @@ int main(int argc, char **argv)
   std::cout << "Doing some initialization...\n\n";
 
   // Initialize Socket for current Process.
+  socket_fd=socket(AF_INET,SOCK_DGRAM,0);
+  if(socket_fd<0){
+            perror("Socket Receiver Creation Fail.");
+  }
+  if(bind(socket_fd,reinterpret_cast<const struct sockaddr *>(& myaddr),sizeof(myaddr))<0){
+    perror("Cannot Bind.");
+    }
+  PerfectLink pl_link = PerfectLink(myid, myaddr, 1,socket_fd);
 
-
-  unsigned long proposal_round;
-  unsigned long vs;
-  unsigned long distinct_num;
-  unsigned long int num_messages;
+  unsigned long target_id;
+  int num_messages;
   std::ifstream ConfigFile(parser.configPath());
+  std::ifstream ConfigFile_2;
+  // ConfigFile_2=ConfigFile;
 
-  
   if (!ConfigFile.is_open())
   {
     std::ostringstream os;
@@ -122,72 +116,24 @@ int main(int argc, char **argv)
   }
   else
   {
-    // Initial the Proposal
-    string str; 
-    long unsigned value;
-    getline(ConfigFile,str);
-    stringstream sstream(str);
-    char ire;
-    sstream >> proposal_round>> vs>>distinct_num;
-    for(long unsigned i=0;i<proposal_round;i++){
-
-      vector<long unsigned> vec_set_single_pro;
-      getline(ConfigFile,str);
-      stringstream sstream(str);
-      while(sstream>>value){
-        vec_set_single_pro.push_back(value);
-        //cout<<value<<endl;
-      }
-      vec_proposals.push_back(vec_set_single_pro);
-      //cout<<"hello"<<endl;
-    }
+    ConfigFile >> num_messages >> target_id;
   }
-  cout<<vec_proposals.size()<<endl;
-  // cout<<vec_proposals[1].size()<<endl;
-  cout << vec_proposals[0][0] << endl;
+  cout << "Messages Num to Send: " << num_messages << endl;
 
-  // Initialize Socket for current Process.
-  socket_fd=socket(AF_INET,SOCK_DGRAM,0);
-  if(socket_fd<0){
-            perror("Socket Receiver Creation Fail.");
-  }
-  if(bind(socket_fd,reinterpret_cast<const struct sockaddr *>(& myaddr),sizeof(myaddr))<0){
-    perror("Cannot Bind.");
-    }
-  
+  messa_send = BroadcastMessages(host_dicts, myid, num_messages, target_id);
+  fn = parser.outputPath();
+  //OutputFile(parser.outputPath(), messa_send, true);
 
-  // Lattice Aggrement Debug seperately for send and deliver;
-  LatteAggrement LatteA(host_dicts,myid,socket_fd,proposal_round);
   std::cout << "Broadcasting and delivering messages...\n\n";
-  cout<<argc<<endl;
-  if(argc<9){
-    cout<<"MYDebug Final"<<endl;
-      thread send_t = thread(& LatteAggrement::broadcast_send_mixed,&LatteA);
-      send_t.detach();
-      thread deliver_t = thread(& LatteAggrement::deliver,&LatteA);
-      deliver_t.detach();
-  }else if(string(argv[8])==string("send")){
-      cout<<"MYDebug "<<argv[8]<<endl;
-      thread send_t = thread(& LatteAggrement::broadcast_send_mixed,&LatteA);
-      send_t.detach();
-  }else if(string(argv[8])==string("deliver")){
-      cout<<"MYDebug "<<argv[8]<<endl;
-      thread deliver_t = thread(& LatteAggrement::deliver,&LatteA);
-      deliver_t.detach();
-  }else{
-      cout<<"MYDebug "<<argv[8]<<endl;
-      thread send_t = thread(& LatteAggrement::broadcast_send_mixed,&LatteA);
-      send_t.detach();
-      thread deliver_t = thread(& LatteAggrement::deliver,&LatteA);
-      deliver_t.detach();
-  }
 
-
-    
-
+  thread send_t = thread(SendListener, std::ref(pl_link), std::ref(messa_send));
+  thread deliver_t = thread(DeliverListener, std::ref(pl_link), std::ref(messa_todeliver));
+  send_t.detach();
+  deliver_t.detach();
 
   // After a process finishes broadcasting,
   // it waits forever for the delivery of messages.
+  cout << "FinalSize" << messa_todeliver.size() << endl;
   while (true)
   {
     std::this_thread::sleep_for(std::chrono::hours(1));
