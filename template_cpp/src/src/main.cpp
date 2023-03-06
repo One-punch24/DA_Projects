@@ -6,24 +6,21 @@
 #include <thread>
 #include <map>
 #include<string>
-#include<sstream>
-#include <mutex>
+// #include <windows.h>
 #include "parse.hpp"
+#include "PerfectLink.hpp"
 #include "hello.h"
 #include "utils.h"
-
-using  namespace std;
-// #include <windows.h>
-
-#include "PerfectLink.hpp"
-#include "LatticeAggrement.hpp"
+#include "URBroadcast.hpp"
+#include "FifoBroadcast.hpp"
 const char *fn;
+vector<Message> messa_send;
+vector<Message> messa_todeliver;
+vector<map<long unsigned int,Message>> urb_delivered;
 int socket_fd;
 unsigned long int window_send_main;
-vector<set<long unsigned>> Todecide;
-vector<vector<long unsigned>> vec_proposals;
-mutex mut_send;
-mutex mut_broadcast;
+std::mutex bq_mutex;
+std::mutex bq_mutex_array[1000];
 
 static void stop(int)
 {
@@ -38,8 +35,11 @@ static void stop(int)
 
   // write/flush output file if necessary
   std::cout << "Writing output.\n";
-  OuttoFile(fn);
-
+  // for(long unsigned int i=0;i<messa_todeliver.size();i++){
+  //   cout<<"d "<< messa_todeliver[i].original_id<<" "<<messa_todeliver[i].seq_n<<endl;
+  // }
+  OutVectoFile(fn, messa_todeliver);
+  cout<<messa_todeliver.size()<<endl;
   // exit directly from signal handler
   exit(0);
 }
@@ -89,8 +89,7 @@ int main(int argc, char **argv)
   }
 
   unsigned long int myid = parser.id();
-  cout<<myid<<endl;
-  struct sockaddr_in myaddr = host_dicts[static_cast<int>(myid-1)];
+  struct sockaddr_in myaddr = host_dicts[static_cast<int>(myid)];
 
   std::cout << "\n";
 
@@ -107,13 +106,12 @@ int main(int argc, char **argv)
   // Initialize Socket for current Process.
 
 
-  unsigned long proposal_round;
-  unsigned long vs;
-  unsigned long distinct_num;
+  unsigned long target_id;
   unsigned long int num_messages;
   std::ifstream ConfigFile(parser.configPath());
+  std::ifstream ConfigFile_2;
+  // ConfigFile_2=ConfigFile;
 
-  
   if (!ConfigFile.is_open())
   {
     std::ostringstream os;
@@ -122,63 +120,34 @@ int main(int argc, char **argv)
   }
   else
   {
-    // Initial the Proposal
-    string str; 
-    long unsigned value;
-    getline(ConfigFile,str);
-    stringstream sstream(str);
-    char ire;
-    sstream >> proposal_round>> vs>>distinct_num;
-    for(long unsigned i=0;i<proposal_round;i++){
-
-      vector<long unsigned> vec_set_single_pro;
-      getline(ConfigFile,str);
-      stringstream sstream(str);
-      while(sstream>>value){
-        vec_set_single_pro.push_back(value);
-        //cout<<value<<endl;
-      }
-      vec_proposals.push_back(vec_set_single_pro);
-      //cout<<"hello"<<endl;
-    }
+    ConfigFile >> num_messages >> target_id;
   }
-  cout<<vec_proposals.size()<<endl;
-  // cout<<vec_proposals[1].size()<<endl;
-  cout << vec_proposals[0][0] << endl;
+  cout << "Messages Num to Send: " << num_messages << endl;
 
-  // Initialize Socket for current Process.
-  socket_fd=socket(AF_INET,SOCK_DGRAM,0);
-  if(socket_fd<0){
-            perror("Socket Receiver Creation Fail.");
-  }
-  if(bind(socket_fd,reinterpret_cast<const struct sockaddr *>(& myaddr),sizeof(myaddr))<0){
-    perror("Cannot Bind.");
-    }
-  
+  FifoBroadcast fb(host_dicts,myid,num_messages,15);
 
-  // Lattice Aggrement Debug seperately for send and deliver;
-  LatteAggrement LatteA(host_dicts,myid,socket_fd,proposal_round);
-  std::cout << "Broadcasting and delivering messages...\n\n";
-  cout<<argc<<endl;
+  // std::cout << "Broadcasting and delivering messages...\n\n";
+
+  // Fifo
   if(argc<9){
     cout<<"MYDebug Final"<<endl;
-      thread send_t = thread(& LatteAggrement::broadcast_send_mixed,&LatteA);
+      thread send_t = thread(& FifoBroadcast::broadcast,&fb);
       send_t.detach();
-      thread deliver_t = thread(& LatteAggrement::deliver,&LatteA);
+      thread deliver_t = thread(& FifoBroadcast::deliver,&fb);
       deliver_t.detach();
-  }else if(string(argv[8])==string("send")){
-      cout<<"MYDebug "<<argv[8]<<endl;
-      thread send_t = thread(& LatteAggrement::broadcast_send_mixed,&LatteA);
+  }else if(string(argv[9])==string("send")){
+      cout<<"MYDebug "<<argv[9]<<endl;
+      thread send_t = thread(& FifoBroadcast::broadcast,&fb);
       send_t.detach();
-  }else if(string(argv[8])==string("deliver")){
-      cout<<"MYDebug "<<argv[8]<<endl;
-      thread deliver_t = thread(& LatteAggrement::deliver,&LatteA);
+  }else if(string(argv[9])==string("deliver")){
+      cout<<"MYDebug "<<argv[9]<<endl;
+      thread deliver_t = thread(& FifoBroadcast::deliver,&fb);
       deliver_t.detach();
   }else{
-      cout<<"MYDebug "<<argv[8]<<endl;
-      thread send_t = thread(& LatteAggrement::broadcast_send_mixed,&LatteA);
+      cout<<"MYDebug "<<argv[9]<<endl;
+      thread send_t = thread(& FifoBroadcast::broadcast,&fb);
       send_t.detach();
-      thread deliver_t = thread(& LatteAggrement::deliver,&LatteA);
+      thread deliver_t = thread(& FifoBroadcast::deliver,&fb);
       deliver_t.detach();
   }
 
@@ -188,6 +157,7 @@ int main(int argc, char **argv)
 
   // After a process finishes broadcasting,
   // it waits forever for the delivery of messages.
+  cout << "FinalSize" << messa_todeliver.size() << endl;
   while (true)
   {
     std::this_thread::sleep_for(std::chrono::hours(1));

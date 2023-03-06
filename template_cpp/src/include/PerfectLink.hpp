@@ -35,22 +35,20 @@ public:
         this->st_link.send(pl_m, dest_addr);
     }
 
-    Message deliver(long unsigned current_iter)
+    Message deliver()
     {
         pair<set<Message>::iterator, bool> ret;
         Message pl_m = this->st_link.deliver();
-        
-        if(pl_m.iter>current_iter){
-            return Message(); 
-        }
         ret = delivered[pl_m.original_id-1].insert(pl_m);
+        //WARN:  pl_m has exited in delivered
         if (ret.second == true)
         {
+            // RealDeliver: Write pl_m to the file;
             return pl_m;
         }
         else
         {
-            return Message(); // For the upper layer, if you see a message with original_id=0, that is a signal one (not effective);
+            return Message(0, 0, 0);
         }
     }
 };

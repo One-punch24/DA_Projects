@@ -29,8 +29,7 @@ public:
     MessaToBroadcast ToBroadCast;
     vector<set<int>> ToDeliver;
     URBroadcast(){};
-    URBroadcast(vector<struct sockaddr_in> & host_dicts,long unsigned  myid,
-    long unsigned numof_messa,long unsigned int window_send){
+    URBroadcast(vector<struct sockaddr_in> & host_dicts,long unsigned  myid,long unsigned numof_messa,long unsigned int window_send){
         // Notice: host_dicts starts from zero;
         this->host_dicts=host_dicts;
         this->myid=myid;
@@ -94,10 +93,10 @@ public:
 
             BlockingQueue & bq=ToBroadCast.messa_to_broadcast[m.original_id-1];
             
-            
+            cout<<"PreURBDeliver"<<m.original_id<<" "<<m.seq_n<<endl;
             auto ret =bq.push(m,current_num).second;
 
-            //cout<<"PreURBDeliver"<<m.original_id<<" "<<m.seq_n<<endl;
+            
 
             /*****************************************************************
              * Ensure Only Deliver Once.

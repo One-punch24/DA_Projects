@@ -43,11 +43,9 @@ public:
             return messa;
         }
         else{
-            cout<<"Something wrong"<<endl;
             perror("Something wrong");
             struct sockaddr_in nmd;
-            // Modify here
-            return Message();
+            return Message(0,0,0);
         }
       
     }
