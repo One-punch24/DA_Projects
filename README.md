@@ -1,4 +1,4 @@
-## Make Cpp Great Again
+## DA Projects
 
 Repo for EPFL CS-451 Distributed Algorithms.
 
